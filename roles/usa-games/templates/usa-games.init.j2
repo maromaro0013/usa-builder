@@ -1,0 +1,81 @@
+#!/bin/bash
+
+# Source function library.
+. /etc/rc.d/init.d/functions
+
+# The name of the service
+NAME=usa-games
+
+# The username and path to the myapp source
+USER=ec2-user
+APP_PATH=/var/www/usa-games/current
+
+# The PID and LOCK files
+UPID=/var/www/usa-games/shared/usa-games.pid
+ULOCK=/var/lock/subsys/usa-games
+
+# The options to use when running puma
+OPTS="-C $APP_PATH/config/puma.rb -d -e {{ inventory_file | regex_replace('^.*\/','') }}"
+
+start() {
+  cd $APP_PATH
+
+  # Start puma
+  echo -n $"Starting puma: "
+  daemon --pidfile=$UPID --user=$USER "PATH=$PATH:/usr/local/bin:/usr/local/lib export PATH && bundle exec puma $OPTS"
+  puma=$?
+  [ $puma -eq 0 ] && touch $ULOCK
+  echo
+
+  return $puma
+}
+
+stop() {
+  cd $APP_PATH
+
+  # Stop puma
+  echo -n $"Stopping puma: "
+  killproc -p $UPID
+  puma=$?
+  [ $puma -eq 0 ] && rm -f $ULOCK
+  echo
+
+  return $puma
+}
+
+restart() {
+  stop
+  start
+}
+
+get_status() {
+  status -p $UPID usa-games
+}
+
+query_status() {
+  get_status >/dev/null 2>&1
+}
+
+case "$1" in
+  start)
+    query_status && exit 0
+    start
+    ;;
+  stop)
+    query_status || exit 0
+    stop
+    ;;
+  restart)
+    restart
+    ;;
+  status)
+    get_status
+    ;;
+  *)
+    N=/etc/init.d/$NAME
+    echo "Usage: $N {start|stop|restart|status}" >&2
+    exit 1
+    ;;
+esac
+
+exit 0

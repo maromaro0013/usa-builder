@@ -1,0 +1,4 @@
+---
+- hosts: usa-games
+  roles:
+    - usa-games

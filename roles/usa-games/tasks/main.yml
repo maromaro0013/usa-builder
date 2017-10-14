@@ -1,0 +1,167 @@
+- name: remove ruby package
+  yum: name=ruby* state=absent
+  sudo: yes
+  async: 7200
+  poll: 5
+
+- name: install necessary packages ruby
+  yum: name={{ item }} state=present
+  with_items:
+    - gcc
+    - gcc-c++
+    - make
+    - openssl-devel
+    - patch
+    - readline
+    - readline-devel
+  sudo: yes
+  async: 7200
+  poll: 5
+
+- name: download ruby
+  command: wget 'https://cache.ruby-lang.org/pub/ruby/2.4/ruby-2.4.2.tar.gz' chdir=/usr/src/
+  sudo: yes
+
+- name: extract ruby
+  command: tar xvzf /usr/src/ruby-2.4.2.tar.gz chdir=/usr/src/
+  sudo: yes
+
+- name: configure ruby
+  command: ./configure --prefix=/usr chdir=/usr/src/ruby-2.4.2
+  sudo: yes
+
+- name: make ruby
+  command: make chdir=/usr/src/ruby-2.4.2
+  sudo: yes
+
+- name: make install ruby
+  command: make install chdir=/usr/src/ruby-2.4.2
+  sudo: yes
+
+- name: install bundler
+  command: gem install bundler
+  sudo: yes
+
+- name: install necessary packages nginx
+  yum: name={{ item }} state=present
+  with_items:
+    - pcre
+    - pcre-devel
+    - bison
+  sudo: yes
+  async: 7200
+  poll: 5
+
+- name: download nginx
+  command: wget 'http://nginx.org/download/nginx-1.13.5.tar.gz' chdir=/usr/src/
+  sudo: yes
+
+- name: extract nginx
+  command: tar xvzf /usr/src/nginx-1.13.5.tar.gz chdir=/usr/src/
+  sudo: yes
+
+- name: configure nginx
+  command: ./configure --user=nginx --group=nginx --with-http_ssl_module --prefix=/usr/local/nginx-1.13.5 chdir=/usr/src/nginx-1.13.5
+  sudo: yes
+
+- name: make nginx
+  command: make chdir=/usr/src/nginx-1.13.5
+  sudo: yes
+
+- name: make install nginx
+  command: make install chdir=/usr/src/nginx-1.13.5
+  sudo: yes
+
+- name: create symlink nginx
+  file: src=/usr/local/nginx-1.13.5 dest=/usr/local/nginx owner=root group=root state=link
+  sudo: yes
+
+- name: copy nginx initd script
+  copy: src=nginx_init dest=/etc/init.d/nginx owner=root group=root mode=0755
+  sudo: yes
+
+- name: copy nginx sysconfig script
+  copy: src=nginx_sysconfig dest=/etc/sysconfig/nginx owner=root group=root mode=0755
+  sudo: yes
+
+- name: install git
+  yum: name=git state=present
+  sudo: yes
+  async: 7200
+  poll: 5
+
+- name: create nginx group
+  group: name=nginx
+  sudo: yes
+
+- name: add nginx user
+  user: name=nginx state=present group=nginx
+  sudo: yes
+
+- name: check ec2-user home (localmachine only)
+  stat: path=/home/ec2-user
+  sudo: yes
+  register: ec2user_home
+
+- name: create ec2-user group (localmachine only)
+  group: name=ec2-user
+  sudo: yes
+  when: not ec2user_home.stat.exists
+
+- name: add ec2-user user (localmachine only)
+  user: name=ec2-user state=present group=ec2-user generate_ssh_key=yes ssh_key_bits=2048 ssh_key_file=.ssh/id_rsa
+  sudo: yes
+  when: not ec2user_home.stat.exists
+
+- name: check ec2-user publickey (localmachine only)
+  stat: path=/home/ec2-user/.ssh/id_rsa.pub
+  register: public_key_exists
+  sudo: yes
+  sudo_user: ec2-user
+
+- name: create ec2-user authorized_keys (localmachine only)
+  file: path=/home/ec2-user/.ssh/authorized_keys state=touch
+  sudo: yes
+  sudo_user: ec2-user
+  when: public_key_exists.stat.exists
+
+- name: cat ec2-user publickey (localmachine only)
+  shell: "cat /home/ec2-user/.ssh/id_rsa.pub"
+  register: public_key_contents
+  sudo: yes
+  sudo_user: ec2-user
+  when: public_key_exists.stat.exists
+
+- name: add ec2-user publickey (localmachine only)
+  lineinfile: dest=/home/ec2-user/.ssh/authorized_keys line='{{ public_key_contents.stdout }}' state=present
+  sudo: yes
+  sudo_user: ec2-user
+  when: public_key_exists.stat.exists
+
+- name: create deploy directory
+  file: path=/var/www state=directory owner=ec2-user group=ec2-user mode=0755
+  sudo: yes
+
+- name: create shared directory
+  file: path=/var/www/usa-games/shared state=directory owner=ec2-user group=ec2-user mode=0755
+  sudo: yes
+
+- name: create dotenv file
+  file: path=/var/www/usa-games/shared/.env.{{ inventory_file | regex_replace('^.*\/','') }} state=touch owner=ec2-user group=ec2-user mode=0755
+  sudo: yes
+
+- name: "copy usa-games initd script"
+  template: src=usa-games.init.j2 dest=/etc/init.d/usa-games owner=root group=root mode=0755
+  sudo: yes
+
+- name: copy nginx config file
+  copy: src=nginx.conf dest=/usr/local/nginx/conf/nginx.conf owner=root group=root mode=0755
+  sudo: yes
+
+- name: create nginx config directory
+  file: path=/usr/local/nginx/conf/conf.d state=directory owner=root group=root mode=0755
+  sudo: yes
+
+- name: copy usa-games nginx config file
+  template: src=usa-games.conf.j2 dest=/usr/local/nginx/conf/conf.d/usa-games.conf owner=root group=root mode=0600
+  sudo: yes
