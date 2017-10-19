@@ -4,7 +4,7 @@ upstream usa-games {
 
 server {
     listen 80;
-    server_name usa-games{{ inventory_file | regex_replace('^.*\/','') | regex_replace('production','') | regex_replace('staging','-staging') | regex_replace('development','-development') }}.clst01.innova-jp.net;
+    server_name usa-games{{ inventory_file | regex_replace('^.*\/','') | regex_replace('production','') | regex_replace('staging','-staging') | regex_replace('development','-development') }}.maromaro0013.com;
 
     root /var/www/usa-games/current;
 
